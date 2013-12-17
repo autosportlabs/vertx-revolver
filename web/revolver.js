@@ -16,35 +16,30 @@ window.onerror = function() {
     return false;
 };
 
-function Revolver(eventBusUrl) {
+function Revolver(fayeUrl) {
     var self = this;
-    var eb = null;
+    var faye = null;
 
     function ebConnect() {
-        var ebConnTimeoutId = setTimeout(function() {
-            debug("EventBus connection timed out");
-
-            self.notify('EventBus connection timed out', 'red', 1000 * 60 * 24);
-        }, 1000);
-
-        eb = new vertx.EventBus(eventBusUrl);
-
-        eb.onopen = function() {
-            debug("EventBus connected");
-
-            clearTimeout(ebConnTimeoutId);
-            ebConnTimeoutId = null;
-
-            self.init();
-        };
-
-        eb.onclose = function() {
-            debug("EventBus closed");
-
-            self.notify('EventBus closed', 'red', 1000 * 60 * 24);
-
-            eb = null;
-        };
+        faye = new Faye.Client(fayeUrl, {
+            timeout: 90,
+            retry: 5,
+        });
+        
+        faye.on('transport:up', function() {
+            debug("Faye client is online");
+            
+            // dismiss notification
+            self.notify('', 'black', 0);
+        });
+        
+        faye.on('transport:down', function() {
+            debug('Faye client is offline');
+            
+            self.notify('Faye client is offline', 'red', 1000 * 60 * 24);
+        });
+        debug(self)
+        self.init();
     }
 
     var locations = {};
@@ -53,16 +48,6 @@ function Revolver(eventBusUrl) {
     var nkill = 0;
     var notifier = null;
     var homenode = null;
-
-    ebConnect();
-
-    setInterval(function() {
-        if (eb === null) {
-            debug("no EventBus; reconnecting");
-
-            ebConnect();
-        }
-    }, 5000);
 
     // display a notification
     self.notify = function(text, backgroundColor, timeVisible) {
@@ -132,8 +117,10 @@ function Revolver(eventBusUrl) {
 
         // dismiss notification
         self.notify('', 'black', 0);
-
-        eb.send('revolver.getLocations', {}, function(msg) {
+        
+        var replyAddr = '/replies/' + (new Date()).getTime();
+        
+        faye.subscribe(replyAddr, function(msg) {
             for (var locationId in msg.locations) {
                 if (msg.locations.hasOwnProperty(locationId)) {
                     self.setLocation(locationId, msg.locations[locationId]);
@@ -142,11 +129,11 @@ function Revolver(eventBusUrl) {
 
             self.rotateTo(msg.current);
 
-            eb.registerHandler('revolver.rotateTo', function(msg) {
+            faye.subscribe('/revolver/rotateTo', function(msg) {
                 self.rotateTo(msg.id);
             });
 
-            eb.registerHandler('revolver.locationUpdated', function(msg) {
+            faye.subscribe('/revolver/locationUpdated', function(msg) {
                 self.setLocation(msg.id, {
                     url: msg.url,
                     reload: msg.reload,
@@ -154,15 +141,17 @@ function Revolver(eventBusUrl) {
                 });
             });
 
-            eb.registerHandler('revolver.locationDeleted', function(msg) {
+            faye.subscribe('/revolver/locationDeleted', function(msg) {
                 self.removeLocation(msg.id);
             });
 
-            eb.registerHandler('revolver.browser.reload', function() {
+            faye.subscribe('/revolver/browser/reload', function() {
                 // reload and ignore cache
                 (window || document).location.reload(true);
             });
         });
+
+        faye.publish('/revolver/getLocations', { replyAddr: replyAddr });
     };
 
     self.rotateTo = function(id) {
@@ -216,4 +205,6 @@ function Revolver(eventBusUrl) {
             debug("no location for " + id);
         }
     };
+    
+    ebConnect();
 }

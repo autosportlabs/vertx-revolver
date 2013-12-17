@@ -54,12 +54,7 @@
             }
         </style>
 
-        <!-- sockjs is required for vert.x's EventBus -->
-        <script type="text/javascript" src="sockjs-0.2.1.min.js"></script>
-
-        <!-- vert.x support -->
-        <script type="text/javascript" src="vertxbus.js"></script>
-
+        <script type="text/javascript" src="/faye/client.js"></script>
         <script type="text/javascript" src="revolver.js"></script>
     </head>
 
@@ -75,9 +70,9 @@
             // when building the URL
             setTimeout(function() {
                 revolver = new Revolver(
-                    window.location.toString() + 'eventbus'
+                    window.location.toString() + 'faye'
                 );
-            }, 5000);
+            }, 50);
 
             // hack around iframes grabbing focus from keyboard events
             setInterval(function() {

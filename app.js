@@ -1,58 +1,73 @@
-var vertx = require('vertx.js');
-var Revolver = require('lib/RevolverController.js');
+// https://github.com/sockjs/sockjs-node/blob/master/examples/echo/server.js
+'use strict';
+
+var http   = require('http');
+var faye   = require('faye');
+var Static = require('node-static').Server;
+
+var Revolver = require('./lib/RevolverController.js');
+
+var config = require(process.argv[2]);
+
+var files = new Static('./web');
+
+// initialize the web server, with static file serving
+var httpServer = http.createServer(function(req, resp) {
+    req.addListener('end', function() {
+        // serve files
+        files.serve(req, resp);
+    }).resume();
+});
+
+
+var fayeServer = new faye.NodeAdapter({
+    mount: '/faye',
+    ping: 45,
+});
+
+var fayeClient = fayeServer.getClient();
 
 var revolver = new Revolver({
-    duration: vertx.config.duration,
-    locations: vertx.config.locations,
-    rotationOrder: vertx.config.rotationOrder
+    duration: config.duration,
+    locations: config.locations,
+    rotationOrder: config.rotationOrder
 });
 
 // bind various EventBus messages to Revolver methods
 revolver.on('locationUpdated', function(id, url, reload, containerType) {
-    vertx.eventBus.publish(
-        'revolver.locationUpdated',
+    fayeClient.publish(
+        '/revolver/locationUpdated',
         {id: id, url: url, reload: reload, containerType: containerType}
     );
 });
 
 revolver.on('locationDeleted', function(id) {
-    vertx.eventBus.publish('revolver.locationDeleted', {id: id});
+    fayeClient.publish('/revolver/locationDeleted', {id: id});
 });
 
 revolver.on('rotateTo', function(id) {
-    vertx.eventBus.publish('revolver.rotateTo', {id: id});
+    fayeClient.publish('/revolver/rotateTo', {id: id});
 });
 
-vertx.eventBus.registerHandler('revolver.getLocations', function(msg, replier) {
+fayeClient.subscribe('/revolver/getLocations', function(msg, replier) {
     revolver
         .getLocations()
-        .then(replier);
+        .then(function(locations) {
+            fayeClient.publish(msg.replyAddr, locations);
+        });
 });
 
-vertx.eventBus.registerHandler('revolver.setLocation', function(msg) {
+fayeClient.subscribe('/revolver/setLocation', function(msg) {
     revolver.setLocation(msg.id, msg.url, msg.reload, msg.containerType);
 });
 
-vertx.eventBus.registerHandler('revolver.removeLocation', function(msg) {
+fayeClient.subscribe('/revolver/removeLocation', function(msg) {
     revolver.removeLocation(msg.id);
 });
 
-// initialize the web server
-vertx.deployModule(
-    'vertx.web-server-v1.0',
-    {
-        port: vertx.config.httpPort,
+// == set it off
 
-        bridge: true,
-        inbound_permitted:  [ {} ],
-        outbound_permitted: [ {} ]
-    },
-    1, // one instance
-    function(deployId) {
-        if (deployId === null) {
-            vertx.logger.error("failed to load web-server");
-        }
-    }
-);
+fayeServer.attach(httpServer);
+httpServer.listen(config.httpPort);
 
 revolver.start();

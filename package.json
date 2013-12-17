@@ -1,0 +1,22 @@
+{
+  "name": "nodejs-revolver",
+  "version": "0.0.0",
+  "description": "web page revolver for extreme feedback displays",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/blalor/nodejs-revolver.git"
+  },
+  "author": "Brian Lalor <blalor@bravo5.org>",
+  "license": "WTFPL",
+  "bugs": {
+    "url": "https://github.com/blalor/nodejs-revolver/issues"
+  },
+  "dependencies": {
+    "q": "~0.9.7",
+    "faye": "~1.0.1"
+  }
+}
